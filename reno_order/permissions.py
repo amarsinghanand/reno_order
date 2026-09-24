@@ -1,3 +1,10 @@
+"""Who can see a Reno Order, and what a Site Supervisor may change.
+
+List and form access are role-based (own / assigned / team). Selling and
+financial fields stay locked for Site Supervisor even if the form is editable
+for remarks. Client JS hides controls; this module is the real check.
+"""
+
 import frappe
 from frappe import _
 from frappe.utils import cint, flt
@@ -51,6 +58,7 @@ def get_permission_query_conditions(user=None):
 
 
 def has_permission(doc, user=None, permission_type=None):
+	"""Same rules as the list query, applied to one document (open / write / cancel)."""
 	user = user or frappe.session.user
 	if user == "Administrator" or "System Manager" in frappe.get_roles(user):
 		return True
@@ -76,6 +84,7 @@ def has_permission(doc, user=None, permission_type=None):
 
 
 def is_site_supervisor_only(user=None):
+	"""True when the user is Site Supervisor and has no selling override role."""
 	user = user or frappe.session.user
 	roles = set(frappe.get_roles(user))
 	return "Site Supervisor" in roles and not roles.intersection(SELLING_OVERRIDE_ROLES)

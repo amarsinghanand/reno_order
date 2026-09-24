@@ -1,9 +1,14 @@
+"""Buying helpers: Hardware item, supplier, and who needs a Material Request.
+
+Items with a BOM are manufactured (Point 4). Stock items without a BOM and
+without enough warehouse qty go on a Purchase Material Request (Point 5).
+"""
+
 import frappe
 from frappe.utils import flt, today
 
 from reno_order.manufacturing import get_default_bom
 from reno_order.utils import get_company, get_warehouse
-
 
 HARDWARE_ITEM = "Hardware"
 SUPPLIER = "Reno Hardware Supplier"

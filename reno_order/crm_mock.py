@@ -5,6 +5,7 @@ from frappe import _
 
 
 def handle_upsert(headers, payload):
+	"""Accept a Bearer token and return CRM-<reno_order>. Same contract as a remote API."""
 	token = _bearer_token(headers)
 	expected = frappe.get_single("Reno Settings").get_password("crm_api_token", raise_exception=False)
 	if not expected or token != expected:

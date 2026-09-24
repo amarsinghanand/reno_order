@@ -1,3 +1,9 @@
+"""Seed the Desk workflow: Draft → … → Installed → Closed, plus Cancelled.
+
+States write back to the ``status`` field. Roles match STATUS_TRANSITIONS.
+Called from after_install / after_migrate so a fresh site gets the same flow.
+"""
+
 import frappe
 
 from reno_order.constants import WORKFLOW_NAME
@@ -47,6 +53,7 @@ TRANSITIONS = [
 
 
 def ensure_workflow():
+	"""Create or refresh Workflow States, Actions, and Reno Order Workflow."""
 	_ensure_states()
 	_ensure_actions()
 	_ensure_workflow_doc()

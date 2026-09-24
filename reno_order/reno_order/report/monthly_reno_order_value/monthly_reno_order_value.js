@@ -1,3 +1,5 @@
+// Filters for Monthly Reno Order Value. Query and index live in reporting.py.
+
 frappe.query_reports["Monthly Reno Order Value"] = {
 	filters: [
 		{

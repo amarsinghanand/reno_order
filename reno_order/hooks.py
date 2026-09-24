@@ -1,3 +1,10 @@
+"""Frappe app hooks for Reno Order.
+
+Wires row permissions, the daily overdue job, CRM/Installed queues, and
+``reno_order`` copy-forward on standard ERPNext documents. Leave Policy
+Assignment is subclassed here so event-based leave is not prorated.
+"""
+
 app_name = "reno_order"
 app_title = "Reno Order"
 app_publisher = "Savyant Assignment"

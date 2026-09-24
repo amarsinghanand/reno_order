@@ -1,3 +1,10 @@
+"""Reno Order document: totals, workflow, and links to standard ERPNext.
+
+Financial amounts are always recalculated on the server. Status changes follow
+STATUS_TRANSITIONS. Downstream Sales Order / Delivery Note / Invoice / Work
+Order / Material Request are created once and linked both ways.
+"""
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -7,7 +14,10 @@ from reno_order.constants import CLOSED_STATUSES, STATUS_TRANSITIONS
 
 
 class RenoOrder(Document):
+	"""Kitchen renovation order. Submit starts Confirmed; Installed is queued."""
+
 	def validate(self):
+		"""Defaults, business rules, role checks, then overwrite client totals."""
 		self.set_missing_defaults()
 		self.validate_business_rules()
 		self.validate_status_transition()
@@ -18,19 +28,23 @@ class RenoOrder(Document):
 		self.refresh_overdue_flag()
 
 	def before_submit(self):
+		"""High discounts need the approver role. First submit leaves Draft."""
 		self.validate_discount_authority()
 		if self.status == "Draft":
 			self.status = "Confirmed"
 
 	def on_submit(self):
+		"""Queue CRM sync after commit so the user is not waiting on HTTP."""
 		from reno_order.crm import sync_on_submit
 
 		sync_on_submit(self)
 
 	def on_update(self):
+		"""If status just became Installed, enqueue one Delivery Note job."""
 		self.enqueue_installed_processing()
 
 	def before_cancel(self):
+		"""Block cancel while a submitted SO / DN / SI / Work Order still exists."""
 		self.validate_no_submitted_downstream()
 
 	def on_cancel(self):
@@ -38,6 +52,7 @@ class RenoOrder(Document):
 		self.is_overdue = 0
 
 	def set_missing_defaults(self):
+		"""Company, currency, Draft, Standard order type, and today's date."""
 		if not self.company:
 			self.company = frappe.defaults.get_user_default("Company") or frappe.db.get_single_value(
 				"Global Defaults", "default_company"
@@ -56,10 +71,12 @@ class RenoOrder(Document):
 			self.transaction_date = getdate()
 
 	def after_insert(self):
+		"""New orders default Assigned To to the owner so Sales User list filters work."""
 		if not self.assigned_to:
 			self.db_set("assigned_to", self.owner, update_modified=False)
 
 	def validate_business_rules(self):
+		"""No empty items, no negative qty/rate/discount, install date not before order date."""
 		if not self.items:
 			frappe.throw(_("Please add at least one item."))
 
@@ -79,6 +96,7 @@ class RenoOrder(Document):
 				frappe.throw(_("Row {0}: Rate cannot be negative.").format(row.idx))
 
 	def validate_status_transition(self):
+		"""Reject skipped statuses and roles that the workflow would not allow."""
 		if self.flags.get("ignore_status_transition") or self.is_new():
 			return
 
@@ -98,12 +116,14 @@ class RenoOrder(Document):
 			)
 
 	def refresh_overdue_flag(self):
+		"""Overdue when the install date is past and the order is not Installed/Closed/Cancelled."""
 		if self.status in CLOSED_STATUSES or not self.expected_installation_date:
 			self.is_overdue = 0
 			return
 		self.is_overdue = 1 if getdate(self.expected_installation_date) < getdate(nowdate()) else 0
 
 	def enqueue_installed_processing(self):
+		"""One RQ job per order. The form request must not create the Delivery Note."""
 		if self.status != "Installed" or self.delivery_note or self.flags.get("in_installed_job"):
 			return
 
@@ -136,6 +156,7 @@ class RenoOrder(Document):
 		self.grand_total = flt(self.total_amount - self.discount_amount, self.precision("grand_total"))
 
 	def validate_discount_authority(self):
+		"""Submit above Reno Settings threshold requires the approver role (or System Manager)."""
 		settings = frappe.get_cached_doc("Reno Settings")
 		threshold = flt(settings.discount_approval_threshold)
 		approver_role = settings.discount_approver_role or "Sales Manager"
@@ -159,6 +180,7 @@ class RenoOrder(Document):
 			)
 
 	def validate_no_submitted_downstream(self):
+		"""Cancel in reverse of posting: SI → DN → SO → Reno Order."""
 		blockers = []
 		for doctype, name in (
 			("Sales Invoice", self.get_existing_sales_invoice()),
@@ -198,6 +220,7 @@ class RenoOrder(Document):
 		)
 
 	def _existing_open_link(self, doctype, linked_name):
+		"""Open (draft or submitted) document for this Reno Order; cancelled does not count."""
 		if linked_name and frappe.db.exists(doctype, linked_name):
 			if frappe.db.get_value(doctype, linked_name, "docstatus") < 2:
 				return linked_name

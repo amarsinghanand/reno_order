@@ -677,6 +677,103 @@ Commit messages describe **why**. Do not commit Desk exports that include Passwo
 - Reviewers clone **this app**, then `bench get-app` / `install-app` onto an existing v16 bench.
 - A public remote is optional for this point; Point 17 covers CI promotion.
 
+## Point 17 — CI/CD
+
+GitHub Actions workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
+
+**Code push → Build / Setup → Test → Result**
+
+| Job | What it does |
+|---|---|
+| **Build / Setup** | Checkout, Python 3.14, `compileall`, reject merge-conflict markers, `ruff check` |
+| **Test** | Needs Build. MariaDB 11.8 + Redis 7. `bench init` on `version-16`, install ERPNext, HRMS, then Reno Order. `bench --site test_site run-tests --app reno_order` |
+| **Result** | GitHub check on the commit / PR. Red blocks merge if you protect `main` |
+
+CI site passwords (`admin` / MariaDB `root`) exist only in the Actions job. They are not committed. `.github/helper/install.sh` creates `test_site` at runtime.
+
+Push the `reno_order` repo to GitHub and the workflow runs on `main` and on every pull request.
+
+### Development → Staging → Production
+
+Do not deploy `main` by SHA to production. Promote a **git tag**.
+
+```
+feature branch ──PR + CI──► main ──tag vX.Y.Z──► staging ──same tag──► production
+```
+
+1. **Development** — branch off `main`. CI on the PR is the only gate.
+2. **Staging** — when `main` is green, `git tag vX.Y.Z`. On the staging bench:
+   - `bench backup --with-files` (take this *before* migrate)
+   - `bench get-app reno_order --branch vX.Y.Z` (or `git fetch && git checkout vX.Y.Z` in `apps/reno_order`)
+   - `bench --site <staging> migrate`
+   - `bench build --app reno_order` if assets changed
+   - `bench --site <staging> restart` / reload workers
+   - Smoke: create a Reno Order, submit, Mark as Installed, open the monthly report
+3. **Production** — only after staging is good. Same tag, same commands, same pre-migrate backup. Enable CRM last (`Reno Settings`), never in the migrate step.
+
+Frappe Cloud: deploy that release to the staging site group, then promote the same release. Self-hosted: Supervisor/systemd restart after migrate; drain `bench worker` / `bench schedule` if a long CRM job is in flight.
+
+### Rollback if production fails
+
+| Failure | Action |
+|---|---|
+| App code wrong, migrate succeeded (idempotent patches) | `git checkout v<previous>` in `apps/reno_order`, `bench restart`. Our `order_type` backfill and index patches are safe to re-run |
+| Migrate failed or schema half-applied | **Restore the pre-deploy backup**: `bench --site <prod> restore <backup>` then `bench migrate` on the previous tag. Do not hand-edit MariaDB |
+| Workers / 502 after a good migrate | `bench restart`, check `supervisorctl status`, Redis, disk. Not an app rollback |
+| Bad CRM behaviour | Turn off **Enable CRM Sync** in Reno Settings. No redeploy |
+
+Never `bench migrate` forward on production without a backup from the same minute. Never force-push over a released tag. If a patch is not reversible, rollback is always **restore backup + previous tag**, not “migrate down”.
+
+### Point 17 assumptions
+
+- Frappe / ERPNext / HRMS stay on `version-16` in CI (`FRAPPE_BRANCH` etc. can override).
+- Protect `main`: required check = this workflow. No direct pushes of untested code.
+- Staging and production are separate sites (or site groups), never the same database.
+
+## Point 18 — Production & server knowledge
+
+This bench is self-hosted Honcho (`Procfile`): web on **8011** (`--site savyant.localhost`), Redis cache/queue, `bench schedule`, and one `bench worker`. Production would use Nginx + Gunicorn + Supervisor instead of `bench serve`.
+
+### Frappe Cloud
+
+| Topic | What it is |
+|---|---|
+| **Application deployment** | App is linked from Git. You pick a branch or tag; Cloud builds assets, installs the app on the site group, runs `migrate`, and restarts workers. Same idea as Point 17: deploy a **release tag**, not a random SHA. No SSH required for a normal release. |
+| **Backups** | Cloud takes scheduled off-site backups (database + files). Restore a site from the dashboard to a point in time. Still take an extra `bench backup` equivalent before a risky migrate if you manage the site yourself. |
+| **Logs** | Desk **Error Log** / **RQ Job** for app exceptions. Cloud “Logs” shows web, worker, and scheduler streams (the hosted `logs/web.log` and `logs/worker.log`). |
+| **Scheduler / workers** | Cloud runs RQ workers (`short`, `default`, `long`) and `bench schedule`. Reno CRM uses **long**; Installed processing uses **default**. If jobs sit in “Queued”, check the site’s worker count and Redis, not the web process. |
+| **Site configuration** | `site_config.json` + `common_site_config.json` are edited in the Cloud UI (encryption, domains, limits). Password fields stay on the site. Never put `db_password` or API tokens in the app repo. |
+
+### Self-hosted — role of each process
+
+| Process | Role |
+|---|---|
+| **Nginx** | TLS terminator and reverse proxy. Routes `Host` to the site (`savyant.localhost`). Serves `/assets`. A wrong Host header hits the wrong site or none (this assignment’s `127.0.0.1` vs site-name issue). |
+| **Gunicorn** | WSGI for Desk and the REST API. `bench serve` is only for development. Timeouts here become the Point 14 “page keeps loading” 504. |
+| **Supervisor / process manager** | Keeps Nginx, Gunicorn, Redis, `bench worker`, `bench schedule`, and Socket.IO running and restarts them. `bench restart` talks to this. Honcho/`Procfile` is the same idea on this laptop. |
+| **Redis** | `redis_cache` (DocType cache) and `redis_queue` (RQ). If Redis is down: login loops, jobs never start, Socket.IO dies. |
+| **MariaDB** | One database per site. Source of truth for Reno Order, SO/DN/SI, and patches. Back this up before every production migrate. |
+| **Workers** | RQ processes. `process_installed_order` and CRM sync **must not** run on the web request. Scale `long` if CRM backs up. |
+| **Scheduler** | `bench schedule` ticks Frappe’s clock and enqueues `hooks.py` jobs (daily `flag_overdue_installations`). It does not execute the job body; a worker does. |
+
+### Troubleshoot
+
+| Symptom | First checks |
+|---|---|
+| **502 Bad Gateway** | Nginx can reach Gunicorn (`supervisorctl status`, `logs/web.error.log`). Process dead, socket missing, or all workers busy. `bench restart`. Disk full also shows as 502. |
+| **Worker queue backlog** | Desk → RQ Job, or `bench --site savyant.localhost doctor` / Redis `llen`. Add a `long` worker for CRM. Stuck job: failed job in Error Log, then `bench worker --queue long`. Deduplicate (`reno-crm-sync-*`, `reno-installed-*`) so retries do not pile up. |
+| **Scheduler not running** | `supervisorctl status` / Procfile `schedule` line. `bench --site savyant.localhost scheduler status` then `enable` / `resume`. Confirm `pause_scheduler` is not set in site config. Daily overdue flags will stop if this is down. |
+| **High CPU** | `top`: Gunicorn vs worker vs `mysqld`. One slow report without the date/status index (Point 10). A CRM job in a retry loop. `bench disable-scheduler` only as a last resort. |
+| **Slow MariaDB** | `SHOW FULL PROCESSLIST`, `EXPLAIN` the monthly report. Confirm `idx_reno_order_date_status` exists. Missing index or `ignore index` looks like `type: ALL`. Add the covering index; do not raise `innodb_buffer_pool` as the first fix. |
+| **Disk full** | `df -h`, `sites/<site>/private/files`, `logs/`, old backups. 502 and MariaDB crashes follow. Truncate logs, move backups off the box, then restart. Site photos are **private** files — they count. |
+| **Failed migration** | Read the traceback (`bench migrate` output / Error Log). Our patches are idempotent (batched `order_type` backfill, `CREATE INDEX IF NOT EXISTS`). If a core patch fails: **restore the pre-migrate backup**, do not `--skip-failing`. Fix the app, then migrate again. |
+
+### Point 18 assumptions
+
+- Production uses Supervisor + Nginx + Gunicorn. This assignment laptop uses Honcho + `bench serve` on 8011.
+- Site name is `savyant.localhost`. Browsing via `127.0.0.1` without a Host alias will not resolve the site.
+- Rollback is still “restore backup + previous app tag” (Point 17). There is no migrate-down.
+
 ### Configuration
 
 Desk → **Reno Settings**

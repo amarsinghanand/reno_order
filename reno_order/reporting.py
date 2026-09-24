@@ -1,3 +1,10 @@
+"""Monthly Reno Order Value query and covering index.
+
+Groups live orders by month and status. The index
+(transaction_date, status, docstatus, grand_total) is meant for last-12-month
+range scans so the report does not full-scan a large table.
+"""
+
 import frappe
 from frappe.utils import add_months, getdate, today
 
@@ -52,11 +59,13 @@ def monthly_value_sql(filters=None, ignore_index=False):
 
 
 def get_monthly_value_data(filters=None):
+	"""Rows for the Script Report: month, status, order_value, order_count."""
 	sql, params = monthly_value_sql(filters)
 	return frappe.db.sql(sql, params, as_dict=True)
 
 
 def explain_monthly_value(filters=None, ignore_index=False):
+	"""EXPLAIN plan. ignore_index=True shows the full-scan baseline."""
 	sql, params = monthly_value_sql(filters, ignore_index=ignore_index)
 	return frappe.db.sql(f"EXPLAIN {sql}", params, as_dict=True)
 
@@ -74,6 +83,7 @@ def has_date_status_index():
 
 
 def ensure_date_status_index():
+	"""Add the covering index if missing. Prefer INPLACE / LOCK=NONE on MariaDB."""
 	if has_date_status_index():
 		return False
 	try:

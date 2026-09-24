@@ -1,3 +1,10 @@
+"""Site Supervisor mobile API.
+
+Authenticated supervisors may mark an assigned order Installed, add remarks,
+and attach a private site photo. Selling fields are never accepted here.
+Guest calls are rejected; Desk Mark as Installed uses the same methods.
+"""
+
 import os
 
 import frappe
@@ -5,7 +12,6 @@ from frappe import _
 from frappe.utils import now_datetime
 
 from reno_order.constants import STATUS_TRANSITIONS
-
 
 INSTALLATION_STATUSES = {"Installed"}
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
@@ -20,11 +26,13 @@ WORKFLOW_ACTION_BY_STATUS = {
 
 
 def _require_login():
+	"""Token or session login is required. Guest is never enough."""
 	if frappe.session.user in (None, "Guest"):
 		frappe.throw(_("Authentication is required."), frappe.AuthenticationError)
 
 
 def _can_update_installation(doc, user=None):
+	"""Sales Manager / System Manager, or the Site Supervisor assigned to this order."""
 	user = user or frappe.session.user
 	roles = set(frappe.get_roles(user))
 	if "System Manager" in roles or "Sales Manager" in roles:
@@ -33,6 +41,7 @@ def _can_update_installation(doc, user=None):
 
 
 def _get_writable_order(reno_order):
+	"""Load the order and enforce both Frappe write perm and installation role."""
 	_require_login()
 	if not reno_order:
 		frappe.throw(_("reno_order is required."))
@@ -54,6 +63,7 @@ def _get_writable_order(reno_order):
 
 
 def _apply_status(doc, status):
+	"""Ready → Installed only. Prefer the workflow action so Desk and API stay aligned."""
 	if status not in INSTALLATION_STATUSES:
 		frappe.throw(
 			_("This API only accepts installation status {0}.").format(", ".join(sorted(INSTALLATION_STATUSES)))

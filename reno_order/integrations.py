@@ -1,6 +1,12 @@
+"""Keep ``reno_order`` on standard ERPNext documents and write the link back.
+
+When a user uses ERPNext Create (SO → DN → SI, or MR → RFQ → …), copy the
+Reno Order from the previous document. Then store the new document name on
+the Reno Order so Connections and duplicate checks stay in sync.
+"""
+
 import frappe
 from frappe import _
-
 
 DOWNSTREAM_LINK_FIELDS = {
 	"Sales Order": "sales_order",

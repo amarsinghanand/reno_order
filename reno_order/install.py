@@ -1,6 +1,11 @@
+"""Install and migrate: roles, custom fields, settings, workflow, demo masters.
+
+Adds ``reno_order`` on standard selling/buying/manufacturing documents and
+``is_event_based`` on Leave Type. Idempotent — safe to run on every migrate.
+"""
+
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
-
 
 CUSTOM_ROLES = ("Site Supervisor", "Production User")
 
@@ -190,12 +195,13 @@ CUSTOM_FIELDS = {
 
 
 def after_install():
+	"""First install: roles, fields, defaults, workflow, Kitchen Cabinet, leave types."""
 	ensure_roles()
 	ensure_custom_fields()
 	ensure_default_settings()
-	from reno_order.workflow import ensure_workflow
 	from reno_order.buying import ensure_buying_masters
 	from reno_order.manufacturing import ensure_manufacturing_masters
+	from reno_order.workflow import ensure_workflow
 
 	ensure_workflow()
 	ensure_manufacturing_masters()
@@ -206,13 +212,14 @@ def after_install():
 
 
 def after_migrate():
+	"""Re-apply the same seeds after a bench migrate so new fields/roles appear."""
 	ensure_roles()
 	ensure_custom_fields()
 	ensure_default_settings()
-	from reno_order.workflow import ensure_workflow
 	from reno_order.buying import ensure_buying_masters
-	from reno_order.manufacturing import ensure_manufacturing_masters
 	from reno_order.leave import ensure_leave_types
+	from reno_order.manufacturing import ensure_manufacturing_masters
+	from reno_order.workflow import ensure_workflow
 
 	ensure_workflow()
 	ensure_manufacturing_masters()
@@ -221,6 +228,7 @@ def after_migrate():
 
 
 def ensure_roles():
+	"""Create Site Supervisor and Production User if they do not exist."""
 	for role_name in CUSTOM_ROLES:
 		if not frappe.db.exists("Role", role_name):
 			frappe.get_doc({"doctype": "Role", "role_name": role_name, "desk_access": 1}).insert(
@@ -229,10 +237,12 @@ def ensure_roles():
 
 
 def ensure_custom_fields():
+	"""Add or update ``reno_order`` links and Leave Type.is_event_based."""
 	create_custom_fields(CUSTOM_FIELDS, update=True)
 
 
 def ensure_default_settings():
+	"""10% discount threshold, Sales Manager approver, CRM mock defaults."""
 	if not frappe.db.exists("DocType", "Reno Settings"):
 		return
 

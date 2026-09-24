@@ -1,3 +1,10 @@
+"""Scheduled and queued jobs for Reno Order.
+
+Daily: mark open orders overdue when the install date has passed.
+On Installed (and when the linked Sales Order is later submitted): create at
+most one draft Delivery Note on a worker, not on the form save.
+"""
+
 import frappe
 from frappe.utils import getdate, nowdate
 

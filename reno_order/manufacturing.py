@@ -1,6 +1,12 @@
-import frappe
-from reno_order.utils import get_company, get_warehouse
+"""Kitchen Cabinet manufacturing masters (BOM, operations, workstations).
 
+Used by Create Work Order. ERPNext manufacturing is unchanged; we only seed
+the demo item and attach ``reno_order`` on the Work Order.
+"""
+
+import frappe
+
+from reno_order.utils import get_company, get_warehouse
 
 FG_ITEM = "Kitchen Cabinet"
 RM_ITEMS = (
@@ -90,7 +96,7 @@ def _ensure_item(item_code, item_group, rate, manufactured):
 
 
 def _ensure_workstations():
-	for _operation, workstation, minutes in OPERATIONS:
+	for _operation, workstation, _minutes in OPERATIONS:
 		if frappe.db.exists("Workstation", workstation):
 			continue
 		doc = frappe.get_doc(
@@ -168,6 +174,7 @@ def _relax_capacity_planning():
 
 
 def get_default_bom(item_code):
+	"""Active default submitted BOM, or None if the item is bought not made."""
 	return frappe.db.get_value(
 		"BOM",
 		{"item": item_code, "is_active": 1, "is_default": 1, "docstatus": 1},
@@ -176,6 +183,7 @@ def get_default_bom(item_code):
 
 
 def get_open_work_order(reno_order, item_code):
+	"""Existing draft/submitted Work Order for this order and item (blocks duplicates)."""
 	return frappe.db.get_value(
 		"Work Order",
 		{"reno_order": reno_order, "production_item": item_code, "docstatus": ["<", 2]},

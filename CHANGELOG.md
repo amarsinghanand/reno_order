@@ -7,6 +7,11 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- GitHub Actions CI: push → compile/ruff → bench install → `run-tests --app reno_order`
+- Production notes: Frappe Cloud, self-hosted process roles, and the standard outage checklist
+
 ## [1.0.0] - 2026-09-23
 
 First release of the kitchen-renovation custom layer for ERPNext / Frappe v16.

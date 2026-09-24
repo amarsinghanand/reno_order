@@ -1,3 +1,11 @@
+"""Outbound CRM sync and inbound webhook.
+
+Submit only enqueues a long-queue job. The worker POSTs the order, writes an
+Integration Request, and retries timeouts / 429 / 5xx. Tokens live in Reno
+Settings Password fields. ``mock://reno-crm`` stays in-process so Desk never
+HTTP-calls the same Gunicorn worker.
+"""
+
 import hashlib
 import hmac
 import json
@@ -30,6 +38,7 @@ class CRMTimeoutError(CRMRetryableError):
 
 
 def ensure_crm_defaults():
+	"""First install: mock URL, timeouts, and generated (encrypted) tokens."""
 	if not frappe.db.exists("DocType", "Reno Settings"):
 		return
 
@@ -60,6 +69,7 @@ def ensure_crm_defaults():
 
 
 def get_crm_settings():
+	"""Read CRM flags and decrypt Password fields for the current site."""
 	settings = frappe.get_single("Reno Settings")
 	return {
 		"enabled": bool(settings.crm_enabled),

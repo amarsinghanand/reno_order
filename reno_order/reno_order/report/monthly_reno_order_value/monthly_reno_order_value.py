@@ -1,3 +1,5 @@
+"""Script Report: order value and count by month and status."""
+
 import frappe
 from frappe import _
 
@@ -5,6 +7,7 @@ from reno_order.reporting import get_monthly_value_data
 
 
 def execute(filters=None):
+	"""Standard Frappe report entry: columns, data, message, chart."""
 	columns = get_columns()
 	data = get_monthly_value_data(filters)
 	return columns, data, None, get_chart(data)

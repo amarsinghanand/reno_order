@@ -1,3 +1,6 @@
+// Reno Order form. UX only: filters, buttons, and friendly messages.
+// Totals, permissions, and Mark as Installed are enforced again on the server.
+
 frappe.ui.form.on("Reno Order", {
 	setup(frm) {
 		frm.set_query("customer_address", () => ({
@@ -123,6 +126,7 @@ frappe.ui.form.on("Reno Order Item", {
 });
 
 function add_downstream_buttons(frm) {
+	// Create SO/DN/SI/WO/MR and View links. Each server method blocks duplicates.
 	if (frm.doc.docstatus !== 1 || is_supervisor_only()) {
 		return;
 	}
@@ -208,6 +212,7 @@ function add_downstream_buttons(frm) {
 }
 
 function add_status_actions(frm) {
+	// Ready + assigned supervisor (or SM). Server still validates the transition.
 	if (!can_show_mark_installed(frm)) {
 		return;
 	}
@@ -278,6 +283,7 @@ function apply_conditional_display(frm) {
 }
 
 function apply_supervisor_field_locks(frm) {
+	// Hide selling controls. Server permlevel + validate_site_supervisor_selling_fields still apply.
 	if (!is_supervisor_only()) {
 		return;
 	}
@@ -292,6 +298,7 @@ function apply_supervisor_field_locks(frm) {
 }
 
 function show_friendly_status(frm) {
+	// Headline only. Does not change status or permissions.
 	if (frm.doc.is_overdue) {
 		frm.dashboard.set_headline_alert(
 			__("Installation is overdue. Expected date: {0}", [frm.doc.expected_installation_date]),

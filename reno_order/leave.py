@@ -1,11 +1,17 @@
+"""HRMS leave fix: event-based types keep the full policy entitlement.
+
+HRMS prorates every non-earned leave by joining date. That is correct for
+Annual Leave and wrong for Maternity / Paternity / Marriage. Leave Type
+``is_event_based`` plus this class override skip proration. HRMS core is
+not patched.
+"""
+
 import frappe
 from frappe.utils import cint, flt, getdate
-
 from hrms.hr.doctype.leave_policy_assignment.leave_policy_assignment import (
 	LeavePolicyAssignment,
 	calculate_pro_rated_leaves,
 )
-
 
 ANNUAL_LEAVE = "Annual Leave"
 EVENT_LEAVE_TYPES = {
