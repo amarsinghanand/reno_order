@@ -1,0 +1,7 @@
+[pre_model_sync]
+# Patches added in this section will be executed before doctypes are migrated
+
+[post_model_sync]
+# Patches added in this section will be executed after doctypes are migrated
+reno_order.patches.v1_0.backfill_reno_order_type
+reno_order.patches.v1_0.add_reno_order_date_status_index

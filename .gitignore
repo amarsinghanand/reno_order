@@ -1,0 +1,64 @@
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+*.py~
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments and local secrets
+.env
+.env.*
+!.env.example
+.venv
+env/
+venv/
+*.pem
+*.key
+id_rsa
+site_config.json
+
+# Bench / site data must never ship with this app
+sites/
+archived_sites/
+*.sql
+*.sql.gz
+*.dump
+*.bak
+backups/
+
+# Logs and test artifacts
+*.log
+logs/
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+.cache
+
+# Dependencies and generated frontend
+node_modules/
+package-lock.json
+
+# IDEs and OS
+.vscode/
+.idea/
+.cursor/
+*.DS_Store
+*.swp
+*~
